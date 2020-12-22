@@ -1,4 +1,5 @@
-TOKEN = "TOKEN_HERE"
+TOKEN = "TOKEN HERE"
+vk_access_token = "TOKEN HERE"
 __SESSIONS__ = []
 __USERNAME_TIMES__ = {}
 msk_offset = 10800000
@@ -91,18 +92,18 @@ class MyClient(discord.Client):
         if findSessionByID(reply_channel.id) == None:
             insertSession(session(reply_channel.id))
         current_session = findSessionByID(reply_channel.id)
-        if message != "/rus":
+        if message != ".ru":
             current_session.last_message[sender] = message
         else:
             repl = change_layout_torus(current_session.last_message[sender])
-            await reply_channel.send("Перевожу на русскую раскладку: " + repl)
+            await reply_channel.send(f"{msg.author.mention}, перевожу на русскую раскладку: " + repl)
             return
         #debug output
         #print(current_session.chat_id)
         #print(current_session.infa_queue)
         print("Message from {0.author}: {0.content}".format(msg))
 
-        if message == "/voicesettings":
+        if message == ".voicesettings":
             speaker_sex = None
             speaker_emotion = None
 
@@ -122,12 +123,12 @@ class MyClient(discord.Client):
             emb.add_field(name = "Голос:", value = speaker_sex, inline = True)
             emb.add_field(name = "Скорость:", value = current_session.speechsettings.speed, inline = True)
             emb.add_field(name = "Тон:", value = speaker_emotion, inline = True)
-            emb.add_field(name = "Команды для изменения настроек синтезатора", value = "**/changespeaker** - изменение голоса с мужского на женский и наоборот\n\n**/changemood <настроение>** - изменение тона речи в соответствии с настроением.\n**Настроения:** **neutral** (нейтральный), **good** (дружеский), **evil** (раздраженный)\n\n**/changespeed <скорость речи>** - изменить скорость говорения (от 0.1 до 2.0)", inline=False)
+            emb.add_field(name = "Команды для изменения настроек синтезатора", value = "**.changespeaker** - изменение голоса с мужского на женский и наоборот\n\n**.changemood <настроение>** - изменение тона речи в соответствии с настроением.\n**Настроения:** **neutral** (нейтральный), **good** (дружеский), **evil** (раздраженный)\n\n**.changespeed <скорость речи>** - изменить скорость говорения (от 0.1 до 2.0)", inline=False)
             emb.set_footer(text="Синтезатор речи предоставлен сервисом apihost.ru")
             await reply_channel.send(embed = emb)
             return
 
-        if message == "/changespeaker":
+        if message == ".changespeaker":
             speaker_sex = None
             if current_session.speechsettings.speaker[0] == 'a':
                 current_session.speechsettings.speaker = "oksana"
@@ -138,7 +139,7 @@ class MyClient(discord.Client):
             await reply_channel.send(f"Голос изменен на {speaker_sex}")
             return
 
-        if message[:len("/changemood")] == "/changemood":
+        if message[:len(".changemood")] == ".changemood":
             new_mood = message.split(" ")[1]
             allowed_moods = ["good",      "neutral",     "evil"]
             rus =           ["дружеский", "нейтральный", "раздраженный"]
@@ -151,7 +152,7 @@ class MyClient(discord.Client):
             await reply_channel.send(f"Тон изменен на {rus[allowed_moods.index(new_mood)]}")
             return
 
-        if message[:len("/changespeed")] == "/changespeed":
+        if message[:len(".changespeed")] == ".changespeed":
             speed = message.split(" ")[1]
             fsp = None
             try:
@@ -164,7 +165,7 @@ class MyClient(discord.Client):
             await reply_channel.send(f"Скорость речи изменена на {current_session.speechsettings.speed}")
             return
         #hidden messages
-        if message == "/stop":
+        if message == ".stop":
             try:
                 voice_channel = msg.author.voice.channel
             except NameError:
@@ -174,48 +175,23 @@ class MyClient(discord.Client):
             current_session.is_playing_gachi = False
             return
 
-        if message == "/gachi":
-            if current_session.is_playing_gachi:
-                await reply_channel.send("Я уже воспроизвожу")
+        if message == ".meme":
+            if len(current_session.meme_publics) == 0:
+                await reply_channel.send("Вы не добавили ни одного паблика. Добавьте их при помощи команды .memepublic. Смотрите .help")
                 return
-            try:
-                temp = msg.author.voice.channel
-            except AttributeError:
-                await reply_channel.send("Войдите в голосовой канал, чтобы использовать эту команду")
-                return
-            
-            song = random.choice(os.listdir("GachiSongs"))
-
-            voice_channel = msg.author.voice.channel
-            await reply_channel.send("Сейчас играет: " + song)
-            vc = await voice_channel.connect()
-            vc.play(discord.FFmpegPCMAudio(source='GachiSongs/' + song[:-3], executable="C:/ffmpeg/ffmpeg.exe"), after=lambda e: print('done', e))
-            current_session.is_playing_gachi = True
-            while vc.is_playing() and current_session.is_playing_gachi:
-                await asyncio.sleep(1)
-            vc.stop()
-            current_session.is_playing_gachi = False
-            await reply_channel.send("♂Gay party♂ кончилась")
-            await vc.disconnect()
-            return
-
-        if message == "/meme":
             posts_quantity = 100
-            public = random.choice(["eternalclassic", "reddit", "roflds", "jumoreski", "kartinkothread", "afrosidemoon", "lookpage", "qubllc", "ru2ch", "cringey", "karkb", "ru9gag"])
-            vk_access_token = "TOKEN_HERE"
+            public = random.choice(current_session.meme_publics)
+            #старая версия api была 5.122
             posts = requests.get("https://api.vk.com/method/wall.get?v=5.122&domain="+public+"&count="+str(posts_quantity)+"&access_token="+vk_access_token).json()['response']
             post_num = random.randint(0, posts_quantity - 1)
 
-            emergency_exit_counter = 0
             while True:
                 try:
                     while len(posts['items'][post_num]['attachments']) > 1 or posts['items'][post_num]['attachments'][0]['type'] != 'photo':
                         post_num = random.randint(0, posts_quantity - 1)
-                        emergency_exit_counter += 1
                     break
                 except KeyError:
                     post_num = random.randint(0, posts_quantity - 1)
-                    emergency_exit_counter += 1
                     continue
 
             picture_link = posts['items'][post_num]['attachments'][0]['photo']['sizes'][-1]['url']
@@ -231,8 +207,54 @@ class MyClient(discord.Client):
             emb.set_footer(text=f"Взято из паблика {public}")
             await reply_channel.send(embed=emb)
             return
+        
+        if message.startswith('.memepublic'):
+            lexems = message.split()
+            if len(lexems) == 1:
+                #выводим список пабликов для данного канала
+                if len(current_session.meme_publics) == 0:
+                    await reply_channel.send("Еще ни одного паблика не было добавлено")
+                else:
+                    rep_message = "```css\nСписок пабликов:\n"
+                    num = 1
+                    for i in current_session.meme_publics:
+                        rep_message += f"{num}. {i}\n"
+                        num += 1
+                    rep_message += "```"
+                    await reply_channel.send(rep_message)
 
-        if message == "/earrape":
+            elif len(lexems) == 2:
+                if lexems[1] == "add":
+                    await reply_channel.send(f"{msg.author.mention}, вы не указали, какой паблик нужно добавить. Смотрите .help")
+                elif lexems[1] == "remove":
+                    await reply_channel.send(f"{msg.author.mention}, вы не указали какой паблик нужно удалить. Смотрите .help")
+                else:
+                    await reply_channel.send(f"{msg.author.mention}, вы неправильно используете эту команду. Смотрите .help")
+
+            elif len(lexems) == 3:
+                if lexems[1] == "add":
+                    if lexems[2] in current_session.meme_publics:
+                        await reply_channel.send(f"{msg.author.mention}, этот паблик уже есть в списке")
+                    else:
+                        try:
+                            public_info = requests.get(f"https://api.vk.com/method/groups.getById?v=5.21&group_id={lexems[2]}&access_token={vk_access_token}").json()["response"]
+                        except KeyError:
+                            await reply_channel.send(f"{msg.author.mention}, к сожалению я не нашел такого паблика. Проверьте, правильно ли вы ввели его короткий адрес.")
+                        else:
+                            current_session.meme_publics.append(lexems[2])
+                            await reply_channel.send(f"{msg.author.mention}, паблик {lexems[2]} добавлен в список")
+                
+                elif lexems[1] == "remove":
+                    try:
+                        current_session.meme_publics.remove(lexems[2])
+                    except ValueError:
+                        await reply_channel.send(f"{msg.author.mention}, этого паблика и так не было в списке")
+                    else:
+                        await reply_channel.send(f"{msg.author.mention}, паблик {lexems[2]} был удален из списка")
+            return
+                    
+
+        if message == ".earrape":
             if current_session.is_playing_gachi:
                 await reply_channel.send("Я уже воспроизвожу")
                 return
@@ -252,24 +274,7 @@ class MyClient(discord.Client):
             await vc.disconnect()
             return
 
-        if message == "/dengi":
-            try:
-                temp = msg.author.voice.channel
-            except AttributeError:
-                await reply_channel.send("Войдите в голосовой канал, чтобы использовать эту команду")
-                return
-
-            song = "dengi.mp3"
-            voice_channel = msg.author.voice.channel
-            vc = await voice_channel.connect()
-            vc.play(discord.FFmpegPCMAudio(source=song, executable="C:/ffmpeg/ffmpeg.exe"), after=lambda e: print('done', e))
-            while vc.is_playing():
-                await asyncio.sleep(1)
-            vc.stop()
-            await vc.disconnect()
-            return
-
-        if message[0:4] == "/say":
+        if message[0:4] == ".say":
             return
             text = message[5:]
             if len(text) > 1000:
@@ -286,16 +291,16 @@ class MyClient(discord.Client):
             os.remove(os.getcwd()+"/"+str(current_session.chat_id)+"/speech.mp3")
             return
 
-        if message[0] == '/':
-            if (message[1:6] == 'start' or message[1:5] == 'help'):
+        if message[0] == '.':
+            if (message[1:5] == 'help'):
                 emb = discord.Embed(title="Доступные команды", colour=discord.Colour.green())
-                emb.add_field(name="/meme", value="Присылает случайный мем", inline=False)
-                emb.add_field(name="/infa <Какая-то фраза>", value="Выводит вероятность названного события/факта. Прям как шар-гадалка", inline=False)
-                emb.add_field(name="/polechudes", value=" Запуск игры Поле Чудес. Можно играть как в приватном чате, так и в групповом с друзьями. Крутите барабан!", inline=False)
-                emb.add_field(name="/time", value="Узнать точное время в вашем городе", inline=False)
-                emb.add_field(name="/rus", value="Перевести ваше последнее сообщение с английской раскладки на русскую. Jxtym j,blyj tckb ds ljkuj gbcfkb nfr)", inline=False)
-                emb.add_field(name="/help", value="Вывести список команд бота")
-                emb.add_field(name="/earrape", value="Введи и посмотри что будет. (Headphones warning)", inline=False)
+                emb.add_field(name=".meme", value="Присылает случайный мем", inline=False)
+                emb.add_field(name=".infa <Какая-то фраза>", value="Выводит вероятность названного события/факта. Прям как шар-гадалка", inline=False)
+                emb.add_field(name=".polechudes", value=" Запуск игры Поле Чудес. Можно играть как в приватном чате, так и в групповом с друзьями. Крутите барабан!", inline=False)
+                emb.add_field(name=".time", value="Узнать точное время в вашем городе", inline=False)
+                emb.add_field(name=".ru", value="Перевести ваше последнее сообщение с английской раскладки на русскую. Jxtym j,blyj tckb ds ljkuj gbcfkb nfr)", inline=False)
+                emb.add_field(name=".help", value="Вывести список команд бота")
+                emb.add_field(name=".earrape", value="Введи и посмотри что будет. (Headphones warning)", inline=False)
                 await reply_channel.send(embed = emb)
                 return
 
@@ -319,9 +324,9 @@ class MyClient(discord.Client):
                 return
 
             #creating polechudes session
-            if (message[0:11] == '/polechudes'):
+            if (message[0:11] == '.polechudes'):
                 if current_session.polechudes_status == 'not_playing':
-                    await reply_channel.send('Начинаем игру.\nТе, кто хотят играть, пишите + в чат.\nЧтобы начать игру, создатель текущей игры должен написать /begin\nДля того, чтобы кикнуть игрока из игры, создатель лобби должен написать /kick @username до того, как игра начнется.\nВы можете выйти из игры в любой момент, написав /exit.')
+                    await reply_channel.send('Начинаем игру.\nТе, кто хотят играть, пишите + в чат.\nЧтобы начать игру, создатель текущей игры должен написать .begin\nДля того, чтобы кикнуть игрока из игры, создатель лобби должен написать .kick @username до того, как игра начнется.\nВы можете выйти из игры в любой момент, написав .exit.')
                     current_session.polechudes_status = 'creating_lobby'
                     current_session.polechudes_lobbycreator = sender
                     current_session.polechudes_players.append(sender)
@@ -331,7 +336,7 @@ class MyClient(discord.Client):
                 elif current_session.polechudes_status == 'creating_lobby':
                     await reply_channel.send('Уже идет создание лобби. Присоединяйтесь быстрее!')
 
-            if message == '/exit' and sender in current_session.polechudes_players:
+            if message == '.exit' and sender in current_session.polechudes_players:
                 if current_session.polechudes_status == 'creating_lobby':
                     del current_session.polechudes_players[current_session.polechudes_players.index(sender)]
                     await reply_channel.send(f'Игрок {msg.author.mention} вышел.')
@@ -409,7 +414,7 @@ class MyClient(discord.Client):
                     emb.add_field(name="Город:", value=__USERNAME_TIMES__[sender], inline=True)
                     emb.add_field(name="Время:", value=t_str[dateend+1:], inline=True)
                     emb.add_field(name="Дата:", value=f"{day} {month[int(t_str[3:5])]}, {year}")
-                    emb.add_field(name="Сбросить город", value="Чтобы сбросить свой город, отправьте команду /resetcity",inline=False)
+                    emb.add_field(name="Сбросить город", value="Чтобы сбросить свой город, отправьте команду .resetcity",inline=False)
                     emb.set_footer(text="Данные предоставлены сервисом Яндекс.Время")
                     await reply_channel.send(embed=emb)
                     return
@@ -441,7 +446,7 @@ class MyClient(discord.Client):
             emb.add_field(name="Город:", value=message, inline=True)
             emb.add_field(name="Время:", value=t_str[dateend+1:], inline=True)
             emb.add_field(name="Дата:", value=f"{day} {month[int(t_str[3:5])]}, {year}", inline=True)
-            emb.add_field(name="Сбросить город", value="Чтобы сбросить свой город, отправьте команду /resetcity",inline=False)
+            emb.add_field(name="Сбросить город", value="Чтобы сбросить свой город, отправьте команду .resetcity",inline=False)
             emb.set_footer(text="Данные предоставлены сервисом Яндекс.Время")
             await reply_channel.send(embed=emb)
             current_session.listen_citytime = False
@@ -463,7 +468,7 @@ class MyClient(discord.Client):
                 await reply_channel.send(f'{msg.author.mention} добавлен в лобби')
                 return
             
-            if message[0:5] == '/kick':
+            if message[0:5] == '.kick':
                 player_kicked = 0
                 player = message[7:len(message)]
                 if (player == sender):
@@ -484,7 +489,7 @@ class MyClient(discord.Client):
                     await reply_channel.send(f'Не удалось кикнуть игрока {msg.author.mention}. Возможно, он сейчас не играет.')
                     return
 
-            if message == '/begin':
+            if message == '.begin':
                 if sender == current_session.polechudes_lobbycreator:
                     current_session.polechudes_status = 'playing'
                     await reply_channel.send('Начинаем игру!')
@@ -503,11 +508,11 @@ class MyClient(discord.Client):
                 
                 questionfile.close()
                 answerfile.close()
-                await reply_channel.send('Внимание, вопрос!\n' + current_session.polechudes_question + '\n' + str(len(current_session.polechudes_word) - 1) + ' букв.\nСейчас очередь @' + current_session.polechudes_players[0] + '\nНазывайте букву!\nВы так же можете ввести слово, введя команду /word слово.')
+                await reply_channel.send('Внимание, вопрос!\n' + current_session.polechudes_question + '\n' + str(len(current_session.polechudes_word) - 1) + ' букв.\nСейчас очередь @' + current_session.polechudes_players[0] + '\nНазывайте букву!\nВы так же можете ввести слово, введя команду .word слово.')
                 current_session.polechudes_current_turn = 0
                 return
 
-            if message[0:5] == '/kick':
+            if message[0:5] == '.kick':
                 player_kicked = 0
                 player = message[7:len(message)]
                 if (player == sender):
@@ -529,13 +534,13 @@ class MyClient(discord.Client):
                     return
 
             if sender == current_session.polechudes_players[current_session.polechudes_current_turn]:
-                if len(message) > 1 and sender == current_session.polechudes_players[current_session.polechudes_current_turn] and message[0:5] != u'/word':
+                if len(message) > 1 and sender == current_session.polechudes_players[current_session.polechudes_current_turn] and message[0:5] != u'.word':
                     await reply_channel.send(f'{msg.author.mention}, введите русскую букву, чтобы ответ был засчитан.')
                     return
                 if len(message) == 1 and  message not in 'ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮйцукенгшщзхъфывапролджэячсмитьбю':
                     await reply_channel.send(f'{msg.author.mention}, введите русскую букву, чтобы ответ был засчитан.')
                     return
-            if message[0:5] == u'/word' and sender == current_session.polechudes_players[current_session.polechudes_current_turn]:
+            if message[0:5] == u'.word' and sender == current_session.polechudes_players[current_session.polechudes_current_turn]:
                 word = rus_letters_upper(message[6:len(message)])
                 if word + '\n' == current_session.polechudes_word:
                     await reply_channel.send('Верно, это слово ' + rus_letters_upper(word) + '!\nИгра окончена')
@@ -555,7 +560,7 @@ class MyClient(discord.Client):
                 if (len(current_session.polechudes_players) == current_session.polechudes_current_turn):
                     current_session.polechudes_current_turn = 0
                     
-                await reply_channel.send('@' + current_session.polechudes_players[current_session.polechudes_current_turn] + ', ваш ход. Называйте букву!\nВы так же можете ввести слово, введя команду /word слово.')
+                await reply_channel.send('@' + current_session.polechudes_players[current_session.polechudes_current_turn] + ', ваш ход. Называйте букву!\nВы так же можете ввести слово, введя команду .word слово.')
                 return
 
             if len(message) == 1 and sender == current_session.polechudes_players[current_session.polechudes_current_turn]:
@@ -582,7 +587,7 @@ class MyClient(discord.Client):
                     current_session.polechudes_current_turn = 0
                     
                 if len(current_session.polechudes_guessed_letters) < len(current_session.polechudes_word) - 1:
-                    await reply_channel.send('@' + current_session.polechudes_players[current_session.polechudes_current_turn] + ', ваш ход. Называйте букву!\nВы так же можете ввести слово, введя команду /word слово.')
+                    await reply_channel.send('@' + current_session.polechudes_players[current_session.polechudes_current_turn] + ', ваш ход. Называйте букву!\nВы так же можете ввести слово, введя команду .word слово.')
                 else:
                     await reply_channel.send('Слово разгадано! Это ' + current_session.polechudes_word + '\nИгра окончена!')
                     current_session.polechudes_status=             u'not_playing'
@@ -614,6 +619,8 @@ class session(object):
         self.is_playing_gachi=              False
         self.last_message=                  {}
         self.speechsettings=                apihost_voice_settings()
+        #self.meme_publics=                  ["eternalclassic", "reddit", "roflds", "jumoreski", "kartinkothread", "afrosidemoon", "lookpage", "qubllc", "ru2ch", "cringey", "karkb", "ru9gag"]
+        self.meme_publics=                  []
 
 class apihost_voice_settings(object):
     speaker = "anton_samokhvalov"
