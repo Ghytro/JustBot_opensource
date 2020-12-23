@@ -77,7 +77,13 @@ import asyncio
 
 class MyClient(discord.Client):
     async def on_ready(self):
+        global __SESSIONS__
         print("Logged on as {0}".format(self.user))
+        for i in os.listdir():
+            if i.isnumeric():
+                insertSession(session(int(i)))
+                __SESSIONS__[-1].load_memelist()
+
 
     async def on_message(self, msg):
         global __SESSIONS__
@@ -207,18 +213,23 @@ class MyClient(discord.Client):
             emb.set_footer(text=f"Взято из паблика {public}")
             await reply_channel.send(embed=emb)
             return
-        
-        if message.startswith('.memepublic'):
+
+        if message.startswith('.memepublics'):
             lexems = message.split()
+
             if len(lexems) == 1:
-                #выводим список пабликов для данного канала
                 if len(current_session.meme_publics) == 0:
                     await reply_channel.send("Еще ни одного паблика не было добавлено")
                 else:
                     rep_message = "```css\nСписок пабликов:\n"
                     num = 1
+                    public_links = ""
                     for i in current_session.meme_publics:
-                        rep_message += f"{num}. {i}\n"
+                        public_links += f"{i},"
+                    public_links = public_links[:-1]
+                    public_data = requests.get(f"https://api.vk.com/method/groups.getById?v=5.21&group_ids={public_links}&access_token={vk_access_token}").json()["response"]
+                    for i in public_data:
+                        rep_message += f"{num}. {i['name']}\n"
                         num += 1
                     rep_message += "```"
                     await reply_channel.send(rep_message)
@@ -231,26 +242,81 @@ class MyClient(discord.Client):
                 else:
                     await reply_channel.send(f"{msg.author.mention}, вы неправильно используете эту команду. Смотрите .help")
 
-            elif len(lexems) == 3:
+            elif len(lexems) >= 3:
                 if lexems[1] == "add":
-                    if lexems[2] in current_session.meme_publics:
-                        await reply_channel.send(f"{msg.author.mention}, этот паблик уже есть в списке")
-                    else:
-                        try:
-                            public_info = requests.get(f"https://api.vk.com/method/groups.getById?v=5.21&group_id={lexems[2]}&access_token={vk_access_token}").json()["response"]
-                        except KeyError:
-                            await reply_channel.send(f"{msg.author.mention}, к сожалению я не нашел такого паблика. Проверьте, правильно ли вы ввели его короткий адрес.")
+                    added_publics = []
+                    skipped_publics = []
+                    not_found_publics = []
+                    for public in lexems[2:]:
+                        if public not in current_session.meme_publics:
+                            try:
+                                public_info = requests.get(f"https://api.vk.com/method/groups.getById?v=5.21&group_id={public}&access_token={vk_access_token}").json()["response"]
+                            except KeyError:
+                                not_found_publics.append(public)
+                            else:
+                                current_session.meme_publics.append(public)
+                                added_publics.append(public)
                         else:
-                            current_session.meme_publics.append(lexems[2])
-                            await reply_channel.send(f"{msg.author.mention}, паблик {lexems[2]} добавлен в список")
-                
-                elif lexems[1] == "remove":
-                    try:
-                        current_session.meme_publics.remove(lexems[2])
-                    except ValueError:
-                        await reply_channel.send(f"{msg.author.mention}, этого паблика и так не было в списке")
+                            skipped_publics.append(public)
+                        time.sleep(0.33)
+
+                    if len(added_publics) == len(lexems[2:]):
+                        await reply_channel.send(f"{msg.author.mention}, все указанные паблики были добавлены в список")
+
                     else:
-                        await reply_channel.send(f"{msg.author.mention}, паблик {lexems[2]} был удален из списка")
+                        reply_message = ""
+                        if len(added_publics):
+                            reply_message += f"{msg.author.mention}, в список добавлены паблики: "
+                            for i in added_publics:
+                                reply_message += f"{i}, "
+                            reply_message = reply_message[:-2]+";\n"
+                        else:
+                            reply_message += f"{msg.author.mention}, ни одного паблика не добавлено в список\n"
+                        
+                        if len(skipped_publics):
+                            reply_message += "В списке уже есть паблики: "
+                            for i in skipped_publics:
+                                reply_message += f"{i}, "
+                            reply_message = reply_message[:-2]+";\n"
+                        
+                        if len(not_found_publics):
+                            reply_message += "Не были найдены паблики: "
+                            for i in not_found_publics:
+                                reply_message += f"{i} "
+                            reply_message = reply_message[:-1]+"; проверьте, правильно ли вы указали их названия"
+                        await reply_channel.send(reply_message)
+
+                elif lexems[1] == "remove":
+                    deleted_publics = []
+                    skipped_publics = []
+                    for public in lexems[2:]:
+                        try:
+                            current_session.meme_publics.remove(public)
+                        except ValueError:
+                            skipped_publics.append(public)
+                        else:
+                            deleted_publics.append(public)
+                    
+                    if len(deleted_publics) == len(lexems[2:]):
+                        await reply_channel.send(f"{msg.author.mention}, все указанные паблики были удалены из списка")
+                    else:
+                        reply_message = ""
+                        if len(deleted_publics):
+                            reply_message += f"{msg.author.mention}, были удалены паблики: "
+                            for i in deleted_publics:
+                                reply_message += f"{i}, "
+                            reply_message = reply_message[:-2]+";\n"
+                        else:
+                            reply_message += f"{msg.author.mention}, не было удалено ни одного паблика\n"
+
+                        if len(skipped_publics):
+                            reply_message += f"Паблики, которых и так нет в списке: "
+                            for i in skipped_publics:
+                                reply_message += f"{i}, "
+                            reply_message = reply_message[:-2]
+                        await reply_channel.send(reply_message)
+                    
+            current_session.save_memelist()
             return
                     
 
@@ -294,6 +360,9 @@ class MyClient(discord.Client):
         if message[0] == '.':
             if (message[1:5] == 'help'):
                 emb = discord.Embed(title="Доступные команды", colour=discord.Colour.green())
+                emb.add_field(name=".memepublics", value="Вывести список пабликов ВКонтакте, из которых можно кидать мемы в этот текстовый канал", inline=False)
+                emb.add_field(name=".memepublics add <Короткие ссылки на паблики через пробел>", value="Добавить паблики ВКонтакте, из которых можно кидать мемы в этот текстовый канал", inline=False)
+                emb.add_field(name=".memepublic remove <Короткие ссылки на паблики через пробел>", value="Удалить из списка паблик ВКонтакте, который вы раньше добавили командой .memepublic add", inline=False)
                 emb.add_field(name=".meme", value="Присылает случайный мем", inline=False)
                 emb.add_field(name=".infa <Какая-то фраза>", value="Выводит вероятность названного события/факта. Прям как шар-гадалка", inline=False)
                 emb.add_field(name=".polechudes", value=" Запуск игры Поле Чудес. Можно играть как в приватном чате, так и в групповом с друзьями. Крутите барабан!", inline=False)
@@ -621,6 +690,20 @@ class session(object):
         self.speechsettings=                apihost_voice_settings()
         #self.meme_publics=                  ["eternalclassic", "reddit", "roflds", "jumoreski", "kartinkothread", "afrosidemoon", "lookpage", "qubllc", "ru2ch", "cringey", "karkb", "ru9gag"]
         self.meme_publics=                  []
+
+    def save_memelist(self):
+        if not os.path.exists(str(self.chat_id)):
+            os.mkdir(str(self.chat_id))
+        with open(f"{self.chat_id}/memepublics", "w") as f:
+            for i in self.meme_publics:
+                f.write(f"{i} ")
+        f.close()
+
+    def load_memelist(self):
+        if not os.path.exists(f"{self.chat_id}/memepublics"):
+            return
+
+        self.meme_publics = open(f"{self.chat_id}/memepublics").readline().split()
 
 class apihost_voice_settings(object):
     speaker = "anton_samokhvalov"
